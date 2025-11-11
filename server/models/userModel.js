@@ -1,75 +1,94 @@
-// userModel.js
+// models/userModel.js
 
 const pool = require("../database/connection");
 const bcrypt = require("bcryptjs");
-const { generateAccessAndRefreshToken } = require("../utils/token");
+const { generateAccessAndRefreshToken } = require("../utils/token"); // Assuming this file exists and works
 
 // Register a new user
-exports.register = (user_name, email, password, phone_number, address, user_type = "buyer") => {
-  return new Promise((resolve, reject) => {
-    // Check if user with email already exists
-    pool.query("SELECT * FROM users WHERE email = ?", [email], (err, results) => {
-      if (err) return reject(err);
-      if (results.length > 0) return reject(new Error("User already exists"));
+exports.register = async (user_name, email, password, phone_number, address, user_type = "buyer") => {
+    try {
+        // 1. Check if user with email already exists
+        const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
+        
+        if (users.length > 0) {
+            // User already exists
+            throw new Error("User already exists");
+        }
 
-      // Hash the password before saving
-      bcrypt.hash(password, 10, (hashErr, hashedPassword) => {
-        if (hashErr) return reject(hashErr);
+        // 2. Hash the password before saving
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-        const query = `
+        // 3. Insert the new user
+        const insertQuery = `
           INSERT INTO users (user_name, email, password, phone_number, address, user_type)
           VALUES (?, ?, ?, ?, ?, ?)
         `;
+        
+        await pool.query(insertQuery, [
+            user_name,
+            email,
+            hashedPassword,
+            phone_number,
+            address,
+            user_type,
+        ]);
 
-        pool.query(
-          query,
-          [user_name, email, hashedPassword, phone_number, address, user_type],
-          (insertErr, result) => {
-            if (insertErr) return reject(insertErr);
-            resolve({ message: "User registered successfully!" });
-          }
-        );
-      });
-    });
-  });
+        // 4. Return success message
+        return { message: "User registered successfully!" };
+
+    } catch (err) {
+        // Rethrow the error to be caught by the controller
+        throw err;
+    }
 };
 
 // Login existing user
-exports.login = (email, password) => {
-  return new Promise((resolve, reject) => {
-    const query = "SELECT * FROM users WHERE email = ?";
-    pool.query(query, [email], (err, results) => {
-      if (err) return reject(err);
-      if (results.length === 0) return reject(new Error("Invalid email or password"));
+exports.login = async (email, password) => {
+    try {
+        // 1. Find the user by email
+        const [users] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
 
-      const user = results[0];
+        if (users.length === 0) {
+            // No user found
+            throw new Error("Invalid email or password");
+        }
 
-      bcrypt.compare(password, user.password, (compareErr, isMatch) => {
-        if (compareErr) return reject(compareErr);
-        if (!isMatch) return reject(new Error("Invalid email or password"));
+        const user = users[0];
 
+        // 2. Compare the provided password with the hashed password in the DB
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (!isMatch) {
+            // Passwords don't match
+            throw new Error("Invalid email or password");
+        }
+
+        // 3. Passwords match! Prepare user data for token
         const userData = {
-          user_id: user.user_id,
-          user_type: user.user_type,
+            user_id: user.user_id,
+            user_type: user.user_type,
+            email: user.email, // Include email for clarity
         };
 
-        // Generate JWT tokens
+        // 4. Generate JWT tokens
+        // We assume this util function exists and is synchronous
         const { token, refreshToken } = generateAccessAndRefreshToken(userData);
-        userData.token = token;
-        userData.refreshToken = refreshToken;
 
-        resolve({
-          message: "Login successful",
-          user: {
-            id: user.user_id,
-            name: user.user_name,
-            email: user.email,
-            type: user.user_type,
-            token,
-            refreshToken,
-          },
-        });
-      });
-    });
-  });
+        // 5. Return all user data and tokens
+        return {
+            message: "Login successful",
+            user: {
+                id: user.user_id,
+                name: user.user_name,
+                email: user.email,
+                type: user.user_type,
+                token,
+                refreshToken,
+            },
+        };
+
+    } catch (err) {
+        // Rethrow the error to be caught by the controller
+        throw err;
+    }
 };

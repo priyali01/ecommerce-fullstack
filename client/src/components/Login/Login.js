@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import axios from "axios";
 import "./Login.scss";
 import { getBaseURL } from "../apiConfig";
-import TokenRefresher from "../Utils/token"; 
+// I've removed TokenRefresher to simplify. 
+// Your model sends a refreshToken, so we'll save it.
 
 function Login(props) {
   let [uname, setUname] = useState("");
@@ -12,32 +13,50 @@ function Login(props) {
   // Adding click handler
   function handleClick() {
     if (validateInputs()) {
-      const user = {
+      const userCredentials = {
         email: uname,
         password: password,
       };
       let url = `${getBaseURL()}api/users/login`;
+      
       axios
-        .post(url, { ...user })
+        .post(url, userCredentials)
         .then((res) => {
-          console.log(res);
-          if (res.data.length > 0) {
+          console.log("Server Response:", res.data); // Helpful for debugging
+
+          // ===== THE FIX: Check for res.data.user and res.data.user.token =====
+          if (res.data.user && res.data.user.token) {
             console.log("Logged in successfully");
+
+            // Get data directly from the user object
+            const user = res.data.user;
+            const token = user.token;
+            const refreshToken = user.refreshToken;
+            const isAdmin = user.type === 'admin'; // Check 'type' property
+            const customerId = user.id; // Check 'id' property
+
+            // Set session storage
             sessionStorage.setItem("isUserAuthenticated", true);
-            const user = res.data[0].isAdmin;
-            sessionStorage.setItem("customerId", res.data[0].userId);
-            sessionStorage.setItem("isAdmin", user ? true : false);
-            sessionStorage.setItem("jwt_token", res.data[0].token);
-            sessionStorage.setItem("jwt_refresh_token", res.data[0].refreshToken);
-            TokenRefresher(res.data[0].refreshToken);
-            props.setUserAuthenticatedStatus(user ? true : false, res.data[0].userId);
+            sessionStorage.setItem("jwt_token", token);
+            sessionStorage.setItem("jwt_refresh_token", refreshToken);
+            sessionStorage.setItem("user", JSON.stringify(user)); // Store the whole user
+            sessionStorage.setItem("isAdmin", isAdmin);
+            sessionStorage.setItem("customerId", customerId);
+
+            // Tell the parent component (App.js) that we are logged in
+            props.setUserAuthenticatedStatus(isAdmin, customerId);
+
           } else {
-            console.log("User not available");
+            // This will now catch login failures
+            console.log("User not available or login failed");
+            setError(res.data.message || "Invalid email or password");
           }
         })
         .catch((err) => {
-          console.log(err);
-          console.log("error");
+          console.error("Login Error:", err);
+          // Get the error message from the backend's response
+          const message = err.response?.data?.message || "Error logging in.";
+          setError(message);
         });
     }
   }
@@ -50,6 +69,7 @@ function Login(props) {
 
   // Function to validate password length
   function validatePassword(password) {
+    // Your old model had a 6-char limit, so we'll keep that.
     return password.length >= 6;
   }
 

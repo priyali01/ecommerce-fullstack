@@ -1,32 +1,33 @@
-const mysql2 = require("mysql2");
+// server/database/connection.js
+const mysql2 = require("mysql2/promise"); // Import the promise-wrapper
 require("dotenv").config();
 
-const useLocalhost = process.env.USE_LOCALHOST === "true";
+// Connection parameters - *Only* read from .env
+const connectionParams = {
+    host: process.env.DB_SERVER_HOST,
+    user: process.env.DB_SERVER_USER,
+    password: process.env.DB_SERVER_PASSWORD,
+    database: process.env.DB_SERVER_DATABASE,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+};
 
-const connectionParams = useLocalhost
-  ? {
-      user: "root",
-      host: "localhost",
-      password: "Manvita@2006",
-      database: "EcommerceDB",
-      connectionLimit: 10,
-    }
-  : {
-      user: process.env.DB_SERVER_USER,
-      host: process.env.DB_SERVER_HOST,
-      password: process.env.DB_SERVER_PASSWORD,
-      database: process.env.DB_SERVER_DATABASE,
-      connectionLimit: 10,
-    };
-
+// Create pool using the promise-wrapper
 const pool = mysql2.createPool(connectionParams);
 
-pool.getConnection((err, connection) => {
-  if (err) console.log("❌ DB Connection Failed:", err.message);
-  else {
-    console.log("✅ DB Connection Done");
-    connection.release();
-  }
-});
+// --- Test connection (Async IIFE) ---
+// This is a modern, clean way to test an async connection
+(async () => {
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        console.log(`✅ Database Connection Successful (Connected to ${connectionParams.database})`);
+    } catch (err) {
+        console.error("❌ Database Connection Failed:", err.message);
+    } finally {
+        if (connection) connection.release();
+    }
+})();
 
-module.exports = pool;
+module.exports = pool; // Export the promise-based pool
