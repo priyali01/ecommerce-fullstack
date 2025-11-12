@@ -130,7 +130,7 @@ const ProductListCustomer = (props) => {
 
     // 5. Call the *correct* API endpoint
     axios
-      .post(`${getBaseURL()}/api/orders`, orderPayload, config)
+      .post(`${getBaseURL()}api/orders`, orderPayload, config)
       .then((res) => {
         // Order was successful!
         setCartProducts([]); // Clear the cart
